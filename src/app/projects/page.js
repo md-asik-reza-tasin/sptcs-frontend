@@ -8,8 +8,10 @@ import EmptyState from "@/components/common/EmptyState";
 import ErrorMessage from "@/components/common/ErrorMessage";
 import Input from "@/components/common/Input";
 import Loader from "@/components/common/Loader";
+import Modal from "@/components/common/Modal";
 import Select from "@/components/common/Select";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import ProjectForm from "@/components/projects/ProjectForm";
 import api from "@/lib/api";
 
 const limit = 10;
@@ -57,6 +59,8 @@ export default function ProjectsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState({
     search: "",
     status: "",
@@ -121,9 +125,34 @@ export default function ProjectsPage() {
     setPage((currentPage) => Math.min(currentPage + 1, totalPages));
   }
 
+  async function handleCreateProject(formData) {
+    setCreating(true);
+    setError("");
+
+    try {
+      await api.post("/api/projects", formData);
+
+      setIsCreateModalOpen(false);
+      setPage(1);
+      setAppliedFilters((currentFilters) => ({ ...currentFilters }));
+    } catch (error) {
+      setError(
+        error.response?.data?.message || "Failed to create project.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <DashboardLayout title="Projects" subtitle="Manage all team projects">
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            Create Project
+          </Button>
+        </div>
+
         <Card>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
             <div className="lg:col-span-2">
@@ -260,6 +289,18 @@ export default function ProjectsPage() {
           </>
         ) : null}
       </div>
+
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title="Create New Project"
+      >
+        <ProjectForm
+          loading={creating}
+          onCancel={() => setIsCreateModalOpen(false)}
+          onSubmit={handleCreateProject}
+        />
+      </Modal>
     </DashboardLayout>
   );
 }
