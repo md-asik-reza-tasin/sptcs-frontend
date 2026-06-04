@@ -12,7 +12,7 @@ import api from "@/lib/api";
 function formatDate(date) {
   if (!date) return "No date";
 
-  return new Date(date).toLocaleString();
+  return new Date(date).toLocaleDateString();
 }
 
 function getProjectName(item) {
@@ -71,7 +71,7 @@ export default function DashboardPage() {
       } catch (error) {
         setError(
           error.response?.data?.message ||
-            "Failed to load dashboard summary.",
+            "Something went wrong. Please try again.",
         );
       } finally {
         setLoading(false);
@@ -100,13 +100,13 @@ export default function DashboardPage() {
       {!loading && !error && !summary ? (
         <EmptyState
           title="No dashboard data"
-          description="Create projects and tasks to see dashboard insights."
+          description="Create projects and tasks to see insights."
         />
       ) : null}
 
       {!loading && !error && summary ? (
         <div className="space-y-6">
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatCard
               label="Total Projects"
               value={summary.totalProjects || 0}
@@ -143,7 +143,7 @@ export default function DashboardPage() {
                       className="border-b border-slate-100 pb-4 last:border-b-0 last:pb-0"
                       key={activity._id || index}
                     >
-                      <p className="text-sm font-medium text-slate-800">
+                      <p className="break-words text-sm font-medium text-slate-800">
                         {activity.message || "Activity update"}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
@@ -166,7 +166,7 @@ export default function DashboardPage() {
                       className="border-b border-slate-100 pb-4 last:border-b-0 last:pb-0"
                       key={task._id || index}
                     >
-                      <p className="text-sm font-semibold text-slate-800">
+                      <p className="break-words text-sm font-semibold text-slate-800">
                         {task.title || "Untitled task"}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
@@ -196,7 +196,7 @@ export default function DashboardPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-slate-800">
+                          <p className="break-words text-sm font-semibold text-slate-800">
                             {task.title || "Untitled task"}
                           </p>
                           <p className="mt-1 text-xs text-slate-500">

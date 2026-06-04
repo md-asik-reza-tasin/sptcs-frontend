@@ -8,7 +8,7 @@ export default function Button({
   className = "",
 }) {
   const baseClasses =
-    "inline-flex items-center justify-center rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
+    "inline-flex min-h-10 items-center justify-center rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
 
   const variantClasses = {
     primary: "bg-blue-600 text-white hover:bg-blue-700",
@@ -27,7 +27,7 @@ export default function Button({
 
   return (
     <button
-      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`${baseClasses} ${variantClasses[variant] || variantClasses.primary} ${sizeClasses[size] || sizeClasses.md} ${className}`}
       disabled={disabled}
       onClick={onClick}
       type={type}

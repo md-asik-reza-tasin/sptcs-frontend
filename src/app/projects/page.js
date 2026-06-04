@@ -60,7 +60,11 @@ export default function ProjectsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
   const [appliedFilters, setAppliedFilters] = useState({
     search: "",
     status: "",
@@ -88,7 +92,8 @@ export default function ProjectsPage() {
         setTotal(response.data?.total || 0);
       } catch (error) {
         setError(
-          error.response?.data?.message || "Failed to load projects.",
+          error.response?.data?.message ||
+            "Something went wrong. Please try again.",
         );
       } finally {
         setLoading(false);
@@ -125,6 +130,20 @@ export default function ProjectsPage() {
     setPage((currentPage) => Math.min(currentPage + 1, totalPages));
   }
 
+  function refetchProjects() {
+    setAppliedFilters((currentFilters) => ({ ...currentFilters }));
+  }
+
+  function openEditModal(project) {
+    setSelectedProject(project);
+    setIsEditModalOpen(true);
+  }
+
+  function closeEditModal() {
+    setSelectedProject(null);
+    setIsEditModalOpen(false);
+  }
+
   async function handleCreateProject(formData) {
     setCreating(true);
     setError("");
@@ -134,13 +153,58 @@ export default function ProjectsPage() {
 
       setIsCreateModalOpen(false);
       setPage(1);
-      setAppliedFilters((currentFilters) => ({ ...currentFilters }));
+      refetchProjects();
     } catch (error) {
       setError(
-        error.response?.data?.message || "Failed to create project.",
+        error.response?.data?.message ||
+          "Something went wrong. Please try again.",
       );
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleUpdateProject(formData) {
+    if (!selectedProject) return;
+
+    setUpdating(true);
+    setError("");
+
+    try {
+      await api.patch(`/api/projects/${selectedProject._id}`, formData);
+
+      closeEditModal();
+      refetchProjects();
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Something went wrong. Please try again.",
+      );
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function handleDeleteProject(project) {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this project?",
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(project._id);
+    setError("");
+
+    try {
+      await api.delete(`/api/projects/${project._id}`);
+      refetchProjects();
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Something went wrong. Please try again.",
+      );
+    } finally {
+      setDeletingId("");
     }
   }
 
@@ -148,7 +212,10 @@ export default function ProjectsPage() {
     <DashboardLayout title="Projects" subtitle="Manage all team projects">
       <div className="space-y-6">
         <div className="flex justify-end">
-          <Button onClick={() => setIsCreateModalOpen(true)}>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
             Create Project
           </Button>
         </div>
@@ -183,10 +250,11 @@ export default function ProjectsPage() {
           </div>
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <Button disabled={loading} onClick={handleSearch}>
+            <Button className="w-full sm:w-auto" disabled={loading} onClick={handleSearch}>
               Search
             </Button>
             <Button
+              className="w-full sm:w-auto"
               disabled={loading}
               onClick={handleReset}
               variant="outline"
@@ -196,7 +264,9 @@ export default function ProjectsPage() {
           </div>
         </Card>
 
-        {loading ? <Loader text="Loading projects..." /> : null}
+        {loading && projects.length === 0 ? (
+          <Loader text="Loading projects..." />
+        ) : null}
 
         {!loading && error ? <ErrorMessage message={error} /> : null}
 
@@ -214,7 +284,7 @@ export default function ProjectsPage() {
                 <Card className="flex flex-col gap-4" key={project._id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-950">
+                      <h2 className="break-words text-lg font-semibold text-slate-950">
                         {project.name}
                       </h2>
                       <p className="mt-2 line-clamp-3 text-sm text-slate-600">
@@ -253,6 +323,26 @@ export default function ProjectsPage() {
                       {formatDate(project.createdAt)}
                     </p>
                   </div>
+
+                  <div className="mt-auto flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      className="w-full sm:w-auto"
+                      onClick={() => openEditModal(project)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      className="w-full sm:w-auto"
+                      disabled={deletingId === project._id}
+                      onClick={() => handleDeleteProject(project)}
+                      size="sm"
+                      variant="danger"
+                    >
+                      {deletingId === project._id ? "Deleting..." : "Delete"}
+                    </Button>
+                  </div>
                 </Card>
               ))}
             </div>
@@ -263,8 +353,9 @@ export default function ProjectsPage() {
                   Showing {projects.length} of {total} projects
                 </p>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <Button
+                    className="w-full sm:w-auto"
                     disabled={page <= 1 || loading}
                     onClick={goToPreviousPage}
                     size="sm"
@@ -276,6 +367,7 @@ export default function ProjectsPage() {
                     Page {page} / {totalPages}
                   </p>
                   <Button
+                    className="w-full sm:w-auto"
                     disabled={page >= totalPages || loading}
                     onClick={goToNextPage}
                     size="sm"
@@ -299,6 +391,19 @@ export default function ProjectsPage() {
           loading={creating}
           onCancel={() => setIsCreateModalOpen(false)}
           onSubmit={handleCreateProject}
+        />
+      </Modal>
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={closeEditModal}
+        title="Edit Project"
+      >
+        <ProjectForm
+          initialData={selectedProject}
+          loading={updating}
+          onCancel={closeEditModal}
+          onSubmit={handleUpdateProject}
         />
       </Modal>
     </DashboardLayout>

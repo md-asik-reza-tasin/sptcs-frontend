@@ -28,9 +28,7 @@ function getInitialFormData(initialData) {
   return {
     name: initialData.name || "",
     description: initialData.description || "",
-    deadline: initialData.deadline
-      ? new Date(initialData.deadline).toISOString().slice(0, 10)
-      : "",
+    deadline: initialData.deadline?.slice(0, 10) || "",
     status: initialData.status || "active",
   };
 }
@@ -124,6 +122,7 @@ export default function ProjectForm({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
         <Button
+          className="w-full sm:w-auto"
           disabled={loading}
           onClick={onCancel}
           type="button"
@@ -131,9 +130,11 @@ export default function ProjectForm({
         >
           Cancel
         </Button>
-        <Button disabled={loading} type="submit">
+        <Button className="w-full sm:w-auto" disabled={loading} type="submit">
           {loading
-            ? "Saving..."
+            ? initialData
+              ? "Updating..."
+              : "Creating..."
             : initialData
               ? "Update Project"
               : "Create Project"}
