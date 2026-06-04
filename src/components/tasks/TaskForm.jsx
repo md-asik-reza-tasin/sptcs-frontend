@@ -119,7 +119,7 @@ export default function TaskForm({
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      <ErrorMessage message={error} />
+      {error && <ErrorMessage message={error} />}
 
       <Input
         label="Title"

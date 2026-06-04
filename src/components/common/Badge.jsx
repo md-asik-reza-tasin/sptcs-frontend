@@ -5,11 +5,12 @@ export default function Badge({ children, variant = "default", className = "" })
     warning: "bg-yellow-100 text-yellow-800",
     danger: "bg-red-100 text-red-700",
     info: "bg-blue-100 text-blue-700",
+    purple: "bg-violet-100 text-violet-700",
   };
 
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${variantClasses[variant] || variantClasses.default} ${className}`}
     >
       {children}
     </span>

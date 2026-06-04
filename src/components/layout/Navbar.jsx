@@ -17,10 +17,10 @@ export default function Navbar({ title, subtitle }) {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <h1 className="break-words text-xl font-bold text-slate-950 sm:text-2xl">
+          <h1 className="break-words text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
             {title}
           </h1>
           {subtitle ? (
@@ -31,17 +31,17 @@ export default function Navbar({ title, subtitle }) {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
-          <div className="min-w-0 text-sm">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm">
             <p className="break-words font-semibold text-slate-800">
               {user?.name || "User"}
             </p>
-            <p className="break-words text-slate-500">
+            <p className="mt-1 inline-flex w-fit rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold capitalize text-blue-700">
               {user?.role || "Member"}
             </p>
           </div>
 
           <button
-            className="w-full rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+            className="w-full rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 sm:w-auto"
             onClick={logoutUser}
             type="button"
           >
@@ -50,15 +50,15 @@ export default function Navbar({ title, subtitle }) {
         </div>
       </div>
 
-      <nav className="mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden">
+      <nav className="mx-auto mt-4 flex max-w-[1600px] gap-2 overflow-x-auto pb-1 md:hidden">
         {mobileLinks.map((link) => {
           const isActive = pathname === link.href;
 
           return (
             <Link
-              className={`shrink-0 rounded-md px-3 py-2 text-sm font-semibold ${
+              className={`shrink-0 rounded-xl px-3 py-2 text-sm font-semibold transition ${
                 isActive
-                  ? "bg-blue-50 text-blue-700"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-600 hover:bg-slate-100"
               }`}
               href={link.href}

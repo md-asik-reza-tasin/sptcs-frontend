@@ -57,8 +57,8 @@ export default function ProjectsPage() {
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState("latest");
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -88,7 +88,6 @@ export default function ProjectsPage() {
         });
 
         setProjects(response.data?.data || []);
-        setTotalPages(response.data?.pages || 1);
         setTotal(response.data?.total || 0);
       } catch (error) {
         setError(
@@ -105,6 +104,7 @@ export default function ProjectsPage() {
 
   function handleSearch() {
     setAppliedFilters({ search, status, sort });
+    setShowAllProjects(false);
     setPage(1);
   }
 
@@ -119,15 +119,8 @@ export default function ProjectsPage() {
     setStatus(resetFilters.status);
     setSort(resetFilters.sort);
     setAppliedFilters(resetFilters);
+    setShowAllProjects(false);
     setPage(1);
-  }
-
-  function goToPreviousPage() {
-    setPage((currentPage) => Math.max(currentPage - 1, 1));
-  }
-
-  function goToNextPage() {
-    setPage((currentPage) => Math.min(currentPage + 1, totalPages));
   }
 
   function refetchProjects() {
@@ -208,6 +201,8 @@ export default function ProjectsPage() {
     }
   }
 
+  const visibleProjects = showAllProjects ? projects : projects.slice(0, 6);
+
   return (
     <DashboardLayout title="Projects" subtitle="Manage all team projects">
       <div className="space-y-6">
@@ -280,7 +275,7 @@ export default function ProjectsPage() {
         {!loading && !error && projects.length > 0 ? (
           <>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-              {projects.map((project) => (
+              {visibleProjects.map((project) => (
                 <Card className="flex flex-col gap-4" key={project._id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -347,37 +342,21 @@ export default function ProjectsPage() {
               ))}
             </div>
 
-            <Card>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-slate-600">
-                  Showing {projects.length} of {total} projects
-                </p>
+            <div className="space-y-4 text-center">
+              <p className="text-sm text-slate-600">
+                Showing {visibleProjects.length} of {total || projects.length} projects
+              </p>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Button
-                    className="w-full sm:w-auto"
-                    disabled={page <= 1 || loading}
-                    onClick={goToPreviousPage}
-                    size="sm"
-                    variant="outline"
-                  >
-                    Previous
-                  </Button>
-                  <p className="text-sm font-medium text-slate-700">
-                    Page {page} / {totalPages}
-                  </p>
-                  <Button
-                    className="w-full sm:w-auto"
-                    disabled={page >= totalPages || loading}
-                    onClick={goToNextPage}
-                    size="sm"
-                    variant="outline"
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </Card>
+              {projects.length > 6 ? (
+                <Button
+                  className="w-full sm:w-auto"
+                  onClick={() => setShowAllProjects((currentValue) => !currentValue)}
+                  variant="outline"
+                >
+                  {showAllProjects ? "Show Less" : "View All Projects"}
+                </Button>
+              ) : null}
+            </div>
           </>
         ) : null}
       </div>
