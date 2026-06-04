@@ -1,7 +1,11 @@
+import DashboardLayout from "@/components/layout/DashboardLayout";
+
 export default function TasksPage() {
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-16 text-slate-900">
-      <h1 className="text-3xl font-bold">Tasks Page</h1>
-    </main>
+    <DashboardLayout title="Tasks" subtitle="Track and manage assigned tasks">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-slate-600">Page content here</p>
+      </div>
+    </DashboardLayout>
   );
 }
