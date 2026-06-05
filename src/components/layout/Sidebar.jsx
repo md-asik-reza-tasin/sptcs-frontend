@@ -5,13 +5,20 @@ import { usePathname } from "next/navigation";
 import useAuth from "@/hooks/useAuth";
 
 const navigationLinks = [
-  { label: "Dashboard", href: "/dashboard", roles: ["admin", "manager", "member"] },
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    roles: ["admin", "manager", "member"],
+  },
   { label: "Projects", href: "/projects", roles: ["admin", "manager"] },
   { label: "Tasks", href: "/tasks", roles: ["admin", "manager"] },
   { label: "My Tasks", href: "/tasks", roles: ["member"] },
   { label: "Team Members", href: "/users", roles: ["admin", "manager"] },
-  { label: "Activities", href: "/activities", roles: ["admin", "manager", "member"] },
-  { label: "Notifications", href: "/notifications", roles: ["admin", "manager", "member"] },
+  {
+    label: "Activities",
+    href: "/activities",
+    roles: ["admin", "manager", "member"],
+  },
 ];
 
 export default function Sidebar() {
@@ -48,7 +55,9 @@ export default function Sidebar() {
             >
               <span
                 className={`h-2 w-2 shrink-0 rounded-full ${
-                  isActive ? "bg-white" : "bg-slate-300 group-hover:bg-blue-500 dark:bg-slate-600 dark:group-hover:bg-blue-400"
+                  isActive
+                    ? "bg-white"
+                    : "bg-slate-300 group-hover:bg-blue-500 dark:bg-slate-600 dark:group-hover:bg-blue-400"
                 }`}
               />
               {link.label}
@@ -58,7 +67,9 @@ export default function Sidebar() {
       </nav>
 
       <div className="mt-8 rounded-2xl bg-gradient-to-br from-blue-50 via-violet-50 to-white p-4 ring-1 ring-blue-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:ring-slate-800">
-        <p className="text-sm font-bold text-slate-900 dark:text-white">Smart Collaboration</p>
+        <p className="text-sm font-bold text-slate-900 dark:text-white">
+          Smart Collaboration
+        </p>
         <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
           Manage projects faster
         </p>
