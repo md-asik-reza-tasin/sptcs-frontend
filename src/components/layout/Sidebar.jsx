@@ -25,7 +25,7 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[270px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-5 py-6 dark:border-slate-800 dark:bg-slate-950 md:block">
       <div className="mb-8 rounded-2xl bg-slate-50 px-4 py-4 dark:bg-slate-900">
         <p className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">
-          MPMS
+          SPTCS
         </p>
         <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
           Project Management System
