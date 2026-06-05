@@ -64,6 +64,19 @@ function getMemberUserId(member) {
   return member.user?._id || member.user;
 }
 
+function getAttachmentList(value) {
+  return value
+    .split(",")
+    .map((attachment) => attachment.trim())
+    .filter(Boolean);
+}
+
+function hasInvalidAttachmentUrl(value) {
+  return getAttachmentList(value).some((attachment) => {
+    return !attachment.startsWith("http://") && !attachment.startsWith("https://");
+  });
+}
+
 export default function TaskForm({
   initialData,
   onSubmit,
@@ -186,6 +199,10 @@ export default function TaskForm({
       errors.dueDate = "Due date is required";
     }
 
+    if (formData.attachments && hasInvalidAttachmentUrl(formData.attachments)) {
+      errors.attachments = "Please enter valid attachment URLs";
+    }
+
     return errors;
   }
 
@@ -201,10 +218,7 @@ export default function TaskForm({
       return;
     }
 
-    const attachments = formData.attachments
-      .split(",")
-      .map((attachment) => attachment.trim())
-      .filter(Boolean);
+    const attachments = getAttachmentList(formData.attachments);
 
     setFieldErrors({});
     setClearedExternalErrors({});
@@ -282,10 +296,11 @@ export default function TaskForm({
       </div>
 
       <Textarea
+        error={getFieldError("attachments")}
         label="Attachments"
         name="attachments"
         onChange={handleInputChange}
-        placeholder="Add comma-separated URLs"
+        placeholder="Paste URLs separated by commas"
         rows={3}
         value={formData.attachments}
       />

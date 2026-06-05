@@ -1,16 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import Badge from "@/components/common/Badge";
 import Card from "@/components/common/Card";
 import EmptyState from "@/components/common/EmptyState";
 import ErrorMessage from "@/components/common/ErrorMessage";
 import Loader from "@/components/common/Loader";
+import ChartCard from "@/components/dashboard/ChartCard";
+import KpiCard from "@/components/dashboard/KpiCard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
 const emptyList = [];
+const CHART_COLORS = {
+  blue: "#2563eb",
+  green: "#16a34a",
+  amber: "#f59e0b",
+  red: "#dc2626",
+  purple: "#7c3aed",
+  slate: "#64748b",
+};
+
+const statusColors = {
+  Todo: CHART_COLORS.blue,
+  "In Progress": CHART_COLORS.amber,
+  Completed: CHART_COLORS.green,
+};
+
+const priorityColors = {
+  High: CHART_COLORS.red,
+  Medium: CHART_COLORS.amber,
+  Low: CHART_COLORS.blue,
+};
 
 function formatDate(date) {
   if (!date) return "No date";
@@ -38,51 +73,21 @@ function getProjectName(item) {
 }
 
 function getMemberName(item) {
-  return (
-    item?.assignedTo?.name ||
-    item?.assignedMember?.name ||
-    item?.member?.name ||
-    item?.name ||
-    "Unassigned"
-  );
+  return item?.assignedMember?.name || item?.member?.name || item?.memberName || "Unassigned";
 }
 
 function getMemberEmail(item) {
-  return item?.email || item?.member?.email || item?.assignedMember?.email || "No email";
+  return item?.member?.email || item?.email || item?.assignedMember?.email || "No email";
 }
 
-function getCount(item) {
-  return item?.count ?? item?.total ?? item?.totalTasks ?? 0;
+function getProgressPercent(completedTasks, totalTasks) {
+  if (!totalTasks) return 0;
+
+  return Math.round((completedTasks / totalTasks) * 100);
 }
 
-function countMapToList(data, keys, fieldName) {
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (!data || typeof data !== "object") {
-    return emptyList;
-  }
-
-  return keys.map((key) => ({
-    [fieldName]: key,
-    _id: key,
-    count: data[key] || 0,
-  }));
-}
-
-function getLabel(item, fallback) {
-  return item?.status || item?.priority || item?._id || fallback;
-}
-
-function formatStatus(status) {
-  const labels = {
-    todo: "Todo",
-    in_progress: "In Progress",
-    completed: "Completed",
-  };
-
-  return labels[status] || status || "Unknown";
+function hasChartData(data) {
+  return data.some((item) => Number(item.value || item.progress || item.completionRate) > 0);
 }
 
 function getPriorityBadgeVariant(priority) {
@@ -95,52 +100,31 @@ function getPriorityBadgeVariant(priority) {
 
 function getStatusVariant(status) {
   if (status === "completed") return "success";
-  if (status === "in_progress") return "purple";
-  if (status === "todo") return "info";
-
-  return "default";
+  if (status === "in_progress") return "warning";
+  return "info";
 }
 
-function getProgressPercent(value, total) {
-  if (!total) return 0;
+function formatStatus(status) {
+  const labels = {
+    todo: "Todo",
+    in_progress: "In Progress",
+    completed: "Completed",
+  };
 
-  return Math.round((value / total) * 100);
+  return labels[status] || status || "Unknown";
 }
 
-function StatCard({ accent, description, icon, label, value }) {
+function Section({ title, description, children }) {
   return (
-    <Card className="group min-h-[150px] overflow-hidden">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="break-words text-sm font-semibold text-slate-500">
-            {label}
-          </p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-            {value}
-          </p>
-        </div>
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg shadow-sm ${accent}`}
-        >
-          {icon}
-        </div>
-      </div>
-      <p className="mt-4 break-words text-sm leading-6 text-slate-500">
-        {description}
-      </p>
-    </Card>
-  );
-}
-
-function Section({ title, subtitle, children, className = "" }) {
-  return (
-    <Card className={className}>
+    <Card className="min-w-0 overflow-hidden">
       <div className="mb-5 min-w-0">
-        <h2 className="break-words text-lg font-bold tracking-tight text-slate-950">
+        <h2 className="break-words text-lg font-bold text-slate-950">
           {title}
         </h2>
-        {subtitle ? (
-          <p className="mt-1 break-words text-sm text-slate-500">{subtitle}</p>
+        {description ? (
+          <p className="mt-1 break-words text-sm text-slate-500">
+            {description}
+          </p>
         ) : null}
       </div>
       {children}
@@ -148,23 +132,20 @@ function Section({ title, subtitle, children, className = "" }) {
   );
 }
 
-function ProgressRow({ label, value, total, color = "bg-blue-600" }) {
-  const percent = getProgressPercent(value, total);
+function AnalyticsTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+
+  const item = payload[0]?.payload || {};
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <span className="break-words font-semibold capitalize text-slate-700">
-          {label}
-        </span>
-        <span className="shrink-0 font-bold text-slate-950">{value}</span>
-      </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-        <div
-          className={`h-full rounded-full ${color}`}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm">
+      <p className="font-bold text-slate-900">{label || item.name || item.projectName || item.memberName}</p>
+      {item.totalTasks !== undefined ? <p>Total: {item.totalTasks}</p> : null}
+      {item.completedTasks !== undefined ? <p>Completed: {item.completedTasks}</p> : null}
+      {item.pendingTasks !== undefined ? <p>Pending: {item.pendingTasks}</p> : null}
+      {item.progress !== undefined ? <p>Progress: {item.progress}%</p> : null}
+      {item.completionRate !== undefined ? <p>Completion: {item.completionRate}%</p> : null}
+      {item.value !== undefined ? <p>Count: {item.value}</p> : null}
     </div>
   );
 }
@@ -183,7 +164,7 @@ export default function DashboardPage() {
 
         setSummary(response.data?.data || null);
       } catch (error) {
-        setError(getErrorMessage(error));
+        setError(getErrorMessage(error, "Failed to load dashboard analytics."));
       } finally {
         setLoading(false);
       }
@@ -195,36 +176,18 @@ export default function DashboardPage() {
   const recentActivities = summary?.recentActivities || emptyList;
   const upcomingDeadlines = summary?.upcomingDeadlines || emptyList;
   const highPriorityTasks = summary?.highPriorityTasks || emptyList;
-  const tasksByPriority = useMemo(() => {
-    return countMapToList(summary?.tasksByPriority, ["high", "medium", "low"], "priority");
-  }, [summary?.tasksByPriority]);
-
-  const taskStatusDistribution = useMemo(() => {
-    return countMapToList(
-      summary?.taskStatusDistribution,
-      ["todo", "in_progress", "completed"],
-      "status",
-    );
-  }, [summary?.taskStatusDistribution]);
-
+  const tasksByPriority = summary?.tasksByPriority || emptyList;
+  const taskStatusDistribution = summary?.taskStatusDistribution || emptyList;
+  const projectProgressTrend = summary?.projectProgressTrend || emptyList;
+  const teamProductivityOverview = summary?.teamProductivityOverview || emptyList;
   const memberWorkload = summary?.memberWorkload || emptyList;
-
-  const totalPriorityTasks = useMemo(() => {
-    return tasksByPriority.reduce((total, item) => total + getCount(item), 0);
-  }, [tasksByPriority]);
-
-  const totalStatusTasks = useMemo(() => {
-    return taskStatusDistribution.reduce((total, item) => total + getCount(item), 0);
-  }, [taskStatusDistribution]);
-
-  const today = formatDate(new Date());
 
   return (
     <DashboardLayout
       title="Dashboard"
-      subtitle="Overview of your projects and team performance"
+      subtitle="Project progress and productivity analytics"
     >
-      {loading ? <Loader text="Loading dashboard..." /> : null}
+      {loading ? <Loader text="Loading dashboard analytics..." /> : null}
 
       {!loading && error ? (
         <Card>
@@ -235,325 +198,330 @@ export default function DashboardPage() {
       {!loading && !error && !summary ? (
         <EmptyState
           title="No dashboard data"
-          description="Create projects and tasks to see insights."
+          description="Create projects and tasks to see analytics."
         />
       ) : null}
 
       {!loading && !error && summary ? (
         <div className="space-y-6">
-          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50 p-5 shadow-sm sm:p-6 lg:p-8">
+          <section className="overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:p-8">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <h1 className="break-words text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-                  Project Overview
+                <h1 className="break-words text-3xl font-bold text-slate-950 sm:text-4xl">
+                  Analytics Overview
                 </h1>
                 <p className="mt-3 max-w-2xl break-words text-sm leading-6 text-slate-600 sm:text-base">
-                  Track projects, tasks, deadlines, and team productivity.
+                  Monitor project progress, workload balance, priorities, and delivery risk from one dashboard.
                 </p>
               </div>
-
-              <div className="w-full rounded-2xl border border-blue-100 bg-white/80 px-5 py-4 shadow-sm sm:w-auto">
-                <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
-                  Today
-                </p>
-                <p className="mt-1 break-words text-lg font-bold text-slate-950">
-                  {today}
+              <div className="w-full rounded-md border border-slate-200 bg-slate-50 px-5 py-4 sm:w-auto">
+                <p className="text-xs font-bold uppercase text-slate-500">Today</p>
+                <p className="mt-1 text-lg font-bold text-slate-950">
+                  {formatDate(new Date())}
                 </p>
               </div>
             </div>
           </section>
 
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard
-              accent="bg-blue-100 text-blue-700"
-              icon="P"
+            <KpiCard
+              accent="bg-blue-600"
               label="Total Projects"
               value={summary.totalProjects || 0}
-              description="All projects in your workspace"
+              description="Projects visible to your role"
             />
-            <StatCard
-              accent="bg-violet-100 text-violet-700"
-              icon="T"
+            <KpiCard
+              accent="bg-purple-600"
               label="Total Tasks"
               value={summary.totalTasks || 0}
-              description="All tasks across every project"
+              description="Tasks tracked in the workspace"
             />
-            <StatCard
-              accent="bg-green-100 text-green-700"
-              icon="C"
+            <KpiCard
+              accent="bg-green-600"
               label="Completed Tasks"
               value={summary.completedTasks || 0}
-              description="Tasks finished by the team"
+              description="Tasks with completed status"
             />
-            <StatCard
-              accent="bg-amber-100 text-amber-700"
-              icon="W"
+            <KpiCard
+              accent="bg-amber-500"
               label="Pending Tasks"
               value={summary.pendingTasks || 0}
-              description="Tasks waiting for completion"
+              description="Tasks still in todo status"
             />
-            <StatCard
-              accent="bg-red-100 text-red-700"
-              icon="O"
+            <KpiCard
+              accent="bg-red-600"
               label="Overdue Tasks"
               value={summary.overdueTasks || 0}
-              description="Tasks past their deadline"
+              description="Open tasks past deadline"
             />
           </section>
 
-          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)]">
-            <div className="min-w-0 space-y-6">
-              <Section
-                title="Recent Activities"
-                subtitle="Latest collaboration updates across your workspace"
-              >
-                {recentActivities.length > 0 ? (
-                  <div className="space-y-4">
-                    {recentActivities.map((activity, index) => (
-                      <div className="flex gap-4" key={activity._id || index}>
-                        <div className="flex flex-col items-center">
-                          <span className="mt-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />
-                          {index !== recentActivities.length - 1 ? (
-                            <span className="mt-2 h-full min-h-10 w-px bg-slate-200" />
-                          ) : null}
-                        </div>
-                        <div className="min-w-0 flex-1 rounded-2xl bg-slate-50 px-4 py-3">
-                          <p className="break-words text-sm font-semibold text-slate-800">
-                            {activity.message || "Activity update"}
-                          </p>
-                          <p className="mt-1 break-words text-xs text-slate-500">
-                            {activity.user?.name || "System"} -{" "}
-                            {formatDateTime(activity.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState title="No activities yet" />
-                )}
-              </Section>
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <ChartCard
+              title="Task Status Distribution"
+              description="Todo, in-progress, and completed task mix"
+            >
+              {hasChartData(taskStatusDistribution) ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      cx="50%"
+                      cy="50%"
+                      data={taskStatusDistribution}
+                      dataKey="value"
+                      innerRadius={64}
+                      nameKey="name"
+                      outerRadius={104}
+                      paddingAngle={3}
+                    >
+                      {taskStatusDistribution.map((item) => (
+                        <Cell
+                          fill={statusColors[item.name] || CHART_COLORS.slate}
+                          key={item.name}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<AnalyticsTooltip />} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState title="No task status data" />
+              )}
+            </ChartCard>
 
-              <Section
-                title="Member Workload Summary"
-                subtitle="Team capacity and completion progress"
-              >
-                {memberWorkload.length > 0 ? (
-                  <div className="space-y-4">
-                    {memberWorkload.map((member, index) => {
-                      const totalTasks = member.totalTasks || 0;
-                      const completedTasks = member.completedTasks || 0;
-                      const pendingTasks = member.pendingTasks || 0;
-                      const percent = getProgressPercent(completedTasks, totalTasks);
-
-                      return (
-                        <div
-                          className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                          key={member._id || member.member?._id || index}
-                        >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <p className="break-words text-sm font-bold text-slate-900">
-                                {getMemberName(member)}
-                              </p>
-                              <p className="mt-1 break-words text-xs text-slate-500">
-                                {getMemberEmail(member)}
-                              </p>
-                            </div>
-                            <Badge variant="purple">{percent}% complete</Badge>
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                            <div className="rounded-xl bg-white px-3 py-2">
-                              <p className="text-lg font-bold text-slate-950">
-                                {totalTasks}
-                              </p>
-                              <p className="text-xs text-slate-500">Total</p>
-                            </div>
-                            <div className="rounded-xl bg-white px-3 py-2">
-                              <p className="text-lg font-bold text-green-700">
-                                {completedTasks}
-                              </p>
-                              <p className="text-xs text-slate-500">Done</p>
-                            </div>
-                            <div className="rounded-xl bg-white px-3 py-2">
-                              <p className="text-lg font-bold text-amber-700">
-                                {pendingTasks}
-                              </p>
-                              <p className="text-xs text-slate-500">Pending</p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-blue-600 to-violet-600"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <EmptyState title="No workload data" />
-                )}
-              </Section>
-            </div>
-
-            <div className="min-w-0 space-y-6">
-              <Section title="Upcoming Deadlines" subtitle="Tasks coming due soon">
-                {upcomingDeadlines.length > 0 ? (
-                  <div className="space-y-3">
-                    {upcomingDeadlines.map((task, index) => (
-                      <div
-                        className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                        key={task._id || index}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="break-words text-sm font-bold text-slate-900">
-                              {task.title || "Untitled task"}
-                            </p>
-                            <p className="mt-1 break-words text-xs text-slate-500">
-                              {getProjectName(task)}
-                            </p>
-                            <p className="mt-1 break-words text-xs text-slate-500">
-                              Assigned to {getMemberName(task)}
-                            </p>
-                          </div>
-                          <Badge variant="info" className="shrink-0">
-                            {formatDate(task.dueDate)}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState title="No upcoming deadlines" />
-                )}
-              </Section>
-
-              <Section title="High Priority Tasks" subtitle="Work that needs attention">
-                {highPriorityTasks.length > 0 ? (
-                  <div className="space-y-3">
-                    {highPriorityTasks.map((task, index) => (
-                      <div
-                        className="rounded-2xl border border-red-100 bg-red-50/50 p-4"
-                        key={task._id || index}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="break-words text-sm font-bold text-slate-900">
-                              {task.title || "Untitled task"}
-                            </p>
-                            <p className="mt-1 break-words text-xs text-slate-500">
-                              {getProjectName(task)}
-                            </p>
-                            <p className="mt-1 break-words text-xs text-slate-500">
-                              Assigned to {getMemberName(task)}
-                            </p>
-                          </div>
-
-                          <Badge
-                            variant={getPriorityBadgeVariant(task.priority)}
-                            className="shrink-0 capitalize"
-                          >
-                            {task.priority || "priority"}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState title="No high priority tasks" />
-                )}
-              </Section>
-            </div>
+            <ChartCard
+              title="Tasks by Priority"
+              description="Priority distribution across current tasks"
+            >
+              {hasChartData(tasksByPriority) ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={tasksByPriority}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip content={<AnalyticsTooltip />} />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                      {tasksByPriority.map((item) => (
+                        <Cell
+                          fill={priorityColors[item.name] || CHART_COLORS.blue}
+                          key={item.name}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState title="No priority data" />
+              )}
+            </ChartCard>
           </section>
 
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Section
-              title="Task Status Distribution"
-              subtitle="Progress across todo, in progress, and completed work"
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <ChartCard
+              title="Project Progress Trend"
+              description="Completion percentage across recent projects"
             >
-              {taskStatusDistribution.length > 0 ? (
-                <div className="space-y-5">
-                  {taskStatusDistribution.map((item, index) => {
-                    const status = getLabel(item, "Unknown");
-                    const count = getCount(item);
+              {projectProgressTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={projectProgressTrend}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="projectName" tick={{ fontSize: 12 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                    <Tooltip content={<AnalyticsTooltip />} />
+                    <Bar
+                      dataKey="progress"
+                      fill={CHART_COLORS.purple}
+                      name="Progress"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState title="No project progress data" />
+              )}
+            </ChartCard>
 
-                    return (
-                      <div key={status || index}>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <Badge variant={getStatusVariant(status)}>
-                            {formatStatus(status)}
-                          </Badge>
-                          <span className="text-sm font-bold text-slate-950">
-                            {count}
-                          </span>
-                        </div>
-                        <ProgressRow
-                          color={
-                            status === "completed"
-                              ? "bg-green-600"
-                              : status === "in_progress"
-                                ? "bg-violet-600"
-                                : "bg-blue-600"
-                          }
-                          label={`${getProgressPercent(count, totalStatusTasks)}%`}
-                          total={totalStatusTasks}
-                          value={count}
-                        />
+            <ChartCard
+              title="Team Productivity Overview"
+              description="Completion rate and task ownership by member"
+            >
+              {teamProductivityOverview.length > 0 ? (
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={teamProductivityOverview}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="memberName" tick={{ fontSize: 12 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                    <Tooltip content={<AnalyticsTooltip />} />
+                    <Bar
+                      dataKey="completionRate"
+                      fill={CHART_COLORS.green}
+                      name="Completion Rate"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState title="No productivity data" />
+              )}
+            </ChartCard>
+          </section>
+
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
+            <Section
+              title="Recent Activities"
+              description="Latest collaboration updates"
+            >
+              {recentActivities.length > 0 ? (
+                <div className="space-y-4">
+                  {recentActivities.map((activity, index) => (
+                    <div className="flex gap-4" key={activity._id || index}>
+                      <div className="flex flex-col items-center">
+                        <span className="mt-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />
+                        {index !== recentActivities.length - 1 ? (
+                          <span className="mt-2 h-full min-h-10 w-px bg-slate-200" />
+                        ) : null}
                       </div>
-                    );
-                  })}
+                      <div className="min-w-0 flex-1 rounded-md bg-slate-50 px-4 py-3">
+                        <p className="break-words text-sm font-semibold text-slate-800">
+                          {activity.message || "Activity update"}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-slate-500">
+                          {activity.user?.name || "System"}
+                          {activity.user?.role ? ` (${activity.user.role})` : ""} -{" "}
+                          {formatDateTime(activity.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <EmptyState title="No status data" />
+                <EmptyState title="No activities yet" />
               )}
             </Section>
 
             <Section
-              title="Tasks by Priority"
-              subtitle="Priority mix across your task pipeline"
+              title="Member Workload Summary"
+              description="Task ownership and completion progress"
             >
-              {tasksByPriority.length > 0 ? (
-                <div className="space-y-5">
-                  {tasksByPriority.map((item, index) => {
-                    const priority = getLabel(item, "Unknown");
-                    const count = getCount(item);
+              {memberWorkload.length > 0 ? (
+                <div className="space-y-4">
+                  {memberWorkload.map((member, index) => {
+                    const totalTasks = member.totalTasks || 0;
+                    const completedTasks = member.completedTasks || 0;
+                    const pendingTasks = member.pendingTasks || 0;
+                    const percent = getProgressPercent(completedTasks, totalTasks);
 
                     return (
-                      <div key={priority || index}>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <Badge
-                            variant={getPriorityBadgeVariant(priority)}
-                            className="capitalize"
-                          >
-                            {priority}
-                          </Badge>
-                          <span className="text-sm font-bold text-slate-950">
-                            {count}
-                          </span>
+                      <div
+                        className="rounded-md border border-slate-100 bg-slate-50 p-4"
+                        key={member.member?._id || index}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-bold text-slate-900">
+                              {getMemberName(member)}
+                            </p>
+                            <p className="mt-1 break-words text-xs text-slate-500">
+                              {getMemberEmail(member)}
+                            </p>
+                          </div>
+                          <Badge variant="success">{percent}%</Badge>
                         </div>
-                        <ProgressRow
-                          color={
-                            priority === "high"
-                              ? "bg-red-600"
-                              : priority === "medium"
-                                ? "bg-amber-500"
-                                : "bg-blue-600"
-                          }
-                          label={`${getProgressPercent(count, totalPriorityTasks)}%`}
-                          total={totalPriorityTasks}
-                          value={count}
-                        />
+                        <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="rounded-md bg-white px-2 py-2">
+                            <p className="font-bold text-slate-950">{totalTasks}</p>
+                            <p className="text-slate-500">Total</p>
+                          </div>
+                          <div className="rounded-md bg-white px-2 py-2">
+                            <p className="font-bold text-green-700">{completedTasks}</p>
+                            <p className="text-slate-500">Done</p>
+                          </div>
+                          <div className="rounded-md bg-white px-2 py-2">
+                            <p className="font-bold text-amber-700">{pendingTasks}</p>
+                            <p className="text-slate-500">Pending</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white">
+                          <div
+                            className="h-full rounded-full bg-blue-600"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <EmptyState title="No priority data" />
+                <EmptyState title="No workload data" />
+              )}
+            </Section>
+          </section>
+
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <Section title="Upcoming Deadlines" description="Open tasks coming due soon">
+              {upcomingDeadlines.length > 0 ? (
+                <div className="space-y-3">
+                  {upcomingDeadlines.map((task, index) => (
+                    <div className="rounded-md border border-slate-100 bg-slate-50 p-4" key={task._id || index}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-bold text-slate-900">
+                            {task.title || "Untitled task"}
+                          </p>
+                          <p className="mt-1 break-words text-xs text-slate-500">
+                            {getProjectName(task)}
+                          </p>
+                          <p className="mt-1 break-words text-xs text-slate-500">
+                            Assigned to {getMemberName(task)}
+                          </p>
+                        </div>
+                        <Badge variant="info" className="shrink-0">
+                          {formatDate(task.dueDate)}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No upcoming deadlines" />
+              )}
+            </Section>
+
+            <Section title="High Priority Tasks" description="Important open work">
+              {highPriorityTasks.length > 0 ? (
+                <div className="space-y-3">
+                  {highPriorityTasks.map((task, index) => (
+                    <div className="rounded-md border border-red-100 bg-red-50/50 p-4" key={task._id || index}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-bold text-slate-900">
+                            {task.title || "Untitled task"}
+                          </p>
+                          <p className="mt-1 break-words text-xs text-slate-500">
+                            {getProjectName(task)}
+                          </p>
+                          <p className="mt-1 break-words text-xs text-slate-500">
+                            Assigned to {getMemberName(task)}
+                          </p>
+                          <p className="mt-1 break-words text-xs text-slate-500">
+                            Due: {formatDate(task.dueDate)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant={getStatusVariant(task.status)}>
+                            {formatStatus(task.status)}
+                          </Badge>
+                          <Badge variant={getPriorityBadgeVariant(task.priority)}>
+                            {task.priority || "priority"}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No high priority tasks" />
               )}
             </Section>
           </section>

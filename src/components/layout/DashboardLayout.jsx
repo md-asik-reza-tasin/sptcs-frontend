@@ -7,7 +7,7 @@ import Sidebar from "@/components/layout/Sidebar";
 export default function DashboardLayout({ children, title, subtitle }) {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen overflow-x-hidden bg-[#F8FAFC] text-slate-900">
+      <div className="min-h-screen overflow-x-hidden bg-[#F8FAFC] text-slate-900 transition">
         <div className="min-w-0 md:flex">
           <Sidebar />
 

@@ -510,6 +510,27 @@ export default function TasksPage() {
                     value={task.status}
                   />
 
+                  {task.attachments?.length > 0 ? (
+                    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        Attachments
+                      </p>
+                      <div className="space-y-1">
+                        {task.attachments.map((attachment, index) => (
+                          <a
+                            className="block break-all text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
+                            href={attachment}
+                            key={`${attachment}-${index}`}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                          >
+                            {attachment}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Button className="w-full" onClick={() => openCommentsModal(task)} size="sm" variant="outline">
                       {isMember ? "View Comments" : "Comments"}
