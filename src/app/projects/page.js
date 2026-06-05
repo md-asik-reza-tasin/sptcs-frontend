@@ -11,8 +11,14 @@ import Loader from "@/components/common/Loader";
 import Modal from "@/components/common/Modal";
 import Select from "@/components/common/Select";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import RoleGuard from "@/components/layout/RoleGuard";
 import ProjectForm from "@/components/projects/ProjectForm";
 import api from "@/lib/api";
+import {
+  getErrorMessage,
+  mapProjectErrorToField,
+  mapProjectMemberErrorToField,
+} from "@/lib/errors";
 
 const limit = 10;
 
@@ -49,10 +55,18 @@ function formatStatus(status) {
   return status.replace("_", " ");
 }
 
-export default function ProjectsPage() {
+function getMemberId(member) {
+  return member.user?._id || member.user;
+}
+
+function ProjectsContent() {
   const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [createErrors, setCreateErrors] = useState({});
+  const [editErrors, setEditErrors] = useState({});
+  const [deleteError, setDeleteError] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState("latest");
@@ -61,7 +75,18 @@ export default function ProjectsPage() {
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projectMembers, setProjectMembers] = useState([]);
+  const [workload, setWorkload] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [addingMember, setAddingMember] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState("");
+  const [memberErrors, setMemberErrors] = useState({});
+  const [memberForm, setMemberForm] = useState({
+    userId: "",
+    role: "",
+  });
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deletingId, setDeletingId] = useState("");
@@ -74,7 +99,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     async function fetchProjects() {
       setLoading(true);
-      setError("");
+      setPageError("");
 
       const query = {
         ...appliedFilters,
@@ -90,10 +115,7 @@ export default function ProjectsPage() {
         setProjects(response.data?.data || []);
         setTotal(response.data?.total || 0);
       } catch (error) {
-        setError(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again.",
-        );
+        setPageError(getErrorMessage(error));
       } finally {
         setLoading(false);
       }
@@ -102,10 +124,27 @@ export default function ProjectsPage() {
     fetchProjects();
   }, [appliedFilters, page]);
 
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const response = await api.get("/api/users", {
+          params: { limit: 100 },
+        });
+
+        setUsers(response.data?.data || []);
+      } catch (error) {
+        setPageError(getErrorMessage(error));
+      }
+    }
+
+    fetchUsers();
+  }, []);
+
   function handleSearch() {
     setAppliedFilters({ search, status, sort });
     setShowAllProjects(false);
     setPage(1);
+    setPageError("");
   }
 
   function handleReset() {
@@ -121,6 +160,10 @@ export default function ProjectsPage() {
     setAppliedFilters(resetFilters);
     setShowAllProjects(false);
     setPage(1);
+    setPageError("");
+    setCreateErrors({});
+    setEditErrors({});
+    setDeleteError("");
   }
 
   function refetchProjects() {
@@ -129,29 +172,139 @@ export default function ProjectsPage() {
 
   function openEditModal(project) {
     setSelectedProject(project);
+    setEditErrors({});
     setIsEditModalOpen(true);
   }
 
   function closeEditModal() {
     setSelectedProject(null);
+    setEditErrors({});
     setIsEditModalOpen(false);
+  }
+
+  function openCreateModal() {
+    setCreateErrors({});
+    setIsCreateModalOpen(true);
+  }
+
+  function closeCreateModal() {
+    setCreateErrors({});
+    setIsCreateModalOpen(false);
+  }
+
+  function handleMemberInputChange(event) {
+    const { name, value } = event.target;
+
+    setMemberForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+    setMemberErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: "",
+      form: "",
+    }));
+  }
+
+  async function fetchProjectCollaboration(projectId) {
+    setMembersLoading(true);
+    setMemberErrors({});
+
+    try {
+      const [membersResponse, workloadResponse] = await Promise.all([
+        api.get(`/api/projects/${projectId}/members`),
+        api.get(`/api/projects/${projectId}/workload`),
+      ]);
+
+      setProjectMembers(membersResponse.data?.data || []);
+      setWorkload(workloadResponse.data?.data || []);
+    } catch (error) {
+      setMemberErrors({ form: getErrorMessage(error) });
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  async function openMembersModal(project) {
+    setSelectedProject(project);
+    setProjectMembers(project.members || []);
+    setWorkload([]);
+    setMemberForm({ userId: "", role: "" });
+    setMemberErrors({});
+    setIsMembersModalOpen(true);
+    await fetchProjectCollaboration(project._id);
+  }
+
+  function closeMembersModal() {
+    setSelectedProject(null);
+    setProjectMembers([]);
+    setWorkload([]);
+    setMemberForm({ userId: "", role: "" });
+    setMemberErrors({});
+    setIsMembersModalOpen(false);
+  }
+
+  async function handleAddMember(event) {
+    event.preventDefault();
+
+    if (!selectedProject) return;
+
+    if (!memberForm.userId) {
+      setMemberErrors({ userId: "User is required" });
+      return;
+    }
+
+    setAddingMember(true);
+    setMemberErrors({});
+
+    try {
+      const response = await api.post(`/api/projects/${selectedProject._id}/members`, {
+        userId: memberForm.userId,
+        role: memberForm.role,
+      });
+
+      setSelectedProject(response.data?.data || selectedProject);
+      setMemberForm({ userId: "", role: "" });
+      await fetchProjectCollaboration(selectedProject._id);
+      refetchProjects();
+    } catch (error) {
+      setMemberErrors(mapProjectMemberErrorToField(getErrorMessage(error)));
+    } finally {
+      setAddingMember(false);
+    }
+  }
+
+  async function handleRemoveMember(member) {
+    if (!selectedProject) return;
+
+    const memberId = getMemberId(member);
+
+    setRemovingMemberId(memberId);
+    setMemberErrors({});
+
+    try {
+      await api.delete(`/api/projects/${selectedProject._id}/members/${memberId}`);
+      await fetchProjectCollaboration(selectedProject._id);
+      refetchProjects();
+    } catch (error) {
+      setMemberErrors({ form: getErrorMessage(error) });
+    } finally {
+      setRemovingMemberId("");
+    }
   }
 
   async function handleCreateProject(formData) {
     setCreating(true);
-    setError("");
+    setCreateErrors({});
 
     try {
       await api.post("/api/projects", formData);
 
-      setIsCreateModalOpen(false);
+      closeCreateModal();
       setPage(1);
       refetchProjects();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setCreateErrors(mapProjectErrorToField(getErrorMessage(error)));
     } finally {
       setCreating(false);
     }
@@ -161,7 +314,7 @@ export default function ProjectsPage() {
     if (!selectedProject) return;
 
     setUpdating(true);
-    setError("");
+    setEditErrors({});
 
     try {
       await api.patch(`/api/projects/${selectedProject._id}`, formData);
@@ -169,10 +322,7 @@ export default function ProjectsPage() {
       closeEditModal();
       refetchProjects();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setEditErrors(mapProjectErrorToField(getErrorMessage(error)));
     } finally {
       setUpdating(false);
     }
@@ -186,16 +336,13 @@ export default function ProjectsPage() {
     if (!confirmed) return;
 
     setDeletingId(project._id);
-    setError("");
+    setDeleteError("");
 
     try {
       await api.delete(`/api/projects/${project._id}`);
       refetchProjects();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setDeleteError(getErrorMessage(error));
     } finally {
       setDeletingId("");
     }
@@ -204,12 +351,12 @@ export default function ProjectsPage() {
   const visibleProjects = showAllProjects ? projects : projects.slice(0, 6);
 
   return (
-    <DashboardLayout title="Projects" subtitle="Manage all team projects">
+    <>
       <div className="space-y-6">
         <div className="flex justify-end">
           <Button
             className="w-full sm:w-auto"
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={openCreateModal}
           >
             Create Project
           </Button>
@@ -263,16 +410,17 @@ export default function ProjectsPage() {
           <Loader text="Loading projects..." />
         ) : null}
 
-        {!loading && error ? <ErrorMessage message={error} /> : null}
+        {!loading && pageError ? <ErrorMessage message={pageError} /> : null}
+        {!loading && deleteError ? <ErrorMessage message={deleteError} /> : null}
 
-        {!loading && !error && projects.length === 0 ? (
+        {!loading && !pageError && projects.length === 0 ? (
           <EmptyState
             title="No projects found"
             description="Create your first project or adjust your filters."
           />
         ) : null}
 
-        {!loading && !error && projects.length > 0 ? (
+        {!loading && !pageError && projects.length > 0 ? (
           <>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
               {visibleProjects.map((project) => (
@@ -322,6 +470,14 @@ export default function ProjectsPage() {
                   <div className="mt-auto flex flex-col gap-3 sm:flex-row">
                     <Button
                       className="w-full sm:w-auto"
+                      onClick={() => openMembersModal(project)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Manage Members
+                    </Button>
+                    <Button
+                      className="w-full sm:w-auto"
                       onClick={() => openEditModal(project)}
                       size="sm"
                       variant="outline"
@@ -363,12 +519,13 @@ export default function ProjectsPage() {
 
       <Modal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={closeCreateModal}
         title="Create New Project"
       >
         <ProjectForm
+          externalErrors={createErrors}
           loading={creating}
-          onCancel={() => setIsCreateModalOpen(false)}
+          onCancel={closeCreateModal}
           onSubmit={handleCreateProject}
         />
       </Modal>
@@ -379,12 +536,147 @@ export default function ProjectsPage() {
         title="Edit Project"
       >
         <ProjectForm
+          externalErrors={editErrors}
           initialData={selectedProject}
           loading={updating}
           onCancel={closeEditModal}
           onSubmit={handleUpdateProject}
         />
       </Modal>
+
+      <Modal
+        isOpen={isMembersModalOpen}
+        onClose={closeMembersModal}
+        title={`Manage Members - ${selectedProject?.name || ""}`}
+      >
+        <div className="space-y-6">
+          <ErrorMessage message={memberErrors.form} />
+
+          <form className="space-y-4" onSubmit={handleAddMember}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select
+                error={memberErrors.userId}
+                label="User"
+                name="userId"
+                onChange={handleMemberInputChange}
+                options={[
+                  { label: "Select user", value: "" },
+                  ...users.map((user) => ({
+                    label: `${user.name} (${user.email}) - ${user.role}`,
+                    value: user._id,
+                  })),
+                ]}
+                value={memberForm.userId}
+              />
+              <Input
+                label="Project Role"
+                name="role"
+                onChange={handleMemberInputChange}
+                placeholder="frontend developer"
+                value={memberForm.role}
+              />
+            </div>
+            <Button className="w-full sm:w-auto" disabled={addingMember} type="submit">
+              {addingMember ? "Adding..." : "Add Member"}
+            </Button>
+          </form>
+
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">Project Members</h3>
+            {membersLoading ? <Loader text="Loading members..." /> : null}
+            {!membersLoading && projectMembers.length === 0 ? (
+              <EmptyState title="No members in this project" />
+            ) : null}
+            {!membersLoading && projectMembers.length > 0 ? (
+              <div className="space-y-3">
+                {projectMembers.map((member) => {
+                  const memberId = getMemberId(member);
+
+                  return (
+                    <div
+                      className="flex flex-col gap-3 rounded-md border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      key={member._id || memberId}
+                    >
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold text-slate-900">
+                          {member.user?.name || "Unknown"}
+                        </p>
+                        <p className="break-words text-xs text-slate-500">
+                          {member.user?.email || "No email"} - {member.user?.role || "member"}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-slate-600">
+                          Project role: {member.role || "member"}
+                        </p>
+                      </div>
+                      <Button
+                        className="w-full sm:w-auto"
+                        disabled={removingMemberId === memberId}
+                        onClick={() => handleRemoveMember(member)}
+                        size="sm"
+                        type="button"
+                        variant="danger"
+                      >
+                        {removingMemberId === memberId ? "Removing..." : "Remove"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">Workload Summary</h3>
+            {!membersLoading && workload.length === 0 ? (
+              <EmptyState title="No workload data yet" />
+            ) : null}
+            {!membersLoading && workload.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {workload.map((item) => (
+                  <div
+                    className="rounded-md border border-slate-200 p-4"
+                    key={item.member?._id}
+                  >
+                    <p className="break-words text-sm font-semibold text-slate-900">
+                      {item.member?.name || "Unknown"}
+                    </p>
+                    <p className="break-words text-xs text-slate-500">
+                      {item.member?.email || "No email"}
+                    </p>
+                    <p className="mt-1 break-words text-xs text-slate-600">
+                      Project role: {item.projectRole || "member"}
+                    </p>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="rounded-md bg-slate-50 px-2 py-2">
+                        <p className="font-bold text-slate-950">{item.totalTasks}</p>
+                        <p className="text-slate-500">Total</p>
+                      </div>
+                      <div className="rounded-md bg-green-50 px-2 py-2">
+                        <p className="font-bold text-green-700">{item.completedTasks}</p>
+                        <p className="text-slate-500">Done</p>
+                      </div>
+                      <div className="rounded-md bg-amber-50 px-2 py-2">
+                        <p className="font-bold text-amber-700">{item.pendingTasks}</p>
+                        <p className="text-slate-500">Pending</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <DashboardLayout title="Projects" subtitle="Manage all team projects">
+      <RoleGuard allowedRoles={["admin", "manager"]}>
+        <ProjectsContent />
+      </RoleGuard>
     </DashboardLayout>
   );
 }

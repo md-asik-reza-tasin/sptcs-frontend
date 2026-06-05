@@ -7,7 +7,9 @@ import EmptyState from "@/components/common/EmptyState";
 import ErrorMessage from "@/components/common/ErrorMessage";
 import Loader from "@/components/common/Loader";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import RoleGuard from "@/components/layout/RoleGuard";
 import api from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 function formatDate(date) {
   if (!date) return "No date";
@@ -21,7 +23,7 @@ function getEntityVariant(entityType) {
   return "default";
 }
 
-export default function ActivitiesPage() {
+function ActivitiesContent() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -35,10 +37,7 @@ export default function ActivitiesPage() {
         const response = await api.get("/api/activities");
         setActivities(response.data?.data || []);
       } catch (error) {
-        setError(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again.",
-        );
+        setError(getErrorMessage(error));
       } finally {
         setLoading(false);
       }
@@ -48,10 +47,7 @@ export default function ActivitiesPage() {
   }, []);
 
   return (
-    <DashboardLayout
-      title="Activities"
-      subtitle="View recent system activities"
-    >
+    <>
       <div className="space-y-6">
         {loading ? <Loader text="Loading activities..." /> : null}
         {!loading && error ? <ErrorMessage message={error} /> : null}
@@ -96,6 +92,19 @@ export default function ActivitiesPage() {
           </Card>
         ) : null}
       </div>
+    </>
+  );
+}
+
+export default function ActivitiesPage() {
+  return (
+    <DashboardLayout
+      title="Activities"
+      subtitle="View recent system activities"
+    >
+      <RoleGuard allowedRoles={["admin", "manager", "member"]}>
+        <ActivitiesContent />
+      </RoleGuard>
     </DashboardLayout>
   );
 }

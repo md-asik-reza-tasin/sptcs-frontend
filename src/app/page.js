@@ -3,8 +3,8 @@ import { ROUTES } from "@/constants/routes";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-16 text-slate-900">
-      <section className="mx-auto flex max-w-3xl flex-col gap-8">
+    <main className="min-h-screen bg-slate-50 px-6 py-16 text-slate-900 flex items-center justify-center">
+      <section className="mx-auto max-w-3xl flex-col gap-8 space-y-8">
         <div className="space-y-4">
           <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
             Smart Project & Task Collaboration System

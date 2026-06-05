@@ -8,6 +8,7 @@ import ErrorMessage from "@/components/common/ErrorMessage";
 import Loader from "@/components/common/Loader";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import api from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 const emptyList = [];
 
@@ -175,15 +176,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchDashboardSummary() {
+      setError("");
+
       try {
         const response = await api.get("/api/dashboard/summary");
 
         setSummary(response.data?.data || null);
       } catch (error) {
-        setError(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again.",
-        );
+        setError(getErrorMessage(error));
       } finally {
         setLoading(false);
       }

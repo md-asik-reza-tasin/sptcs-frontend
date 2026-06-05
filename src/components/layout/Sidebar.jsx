@@ -2,17 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import useAuth from "@/hooks/useAuth";
 
 const navigationLinks = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Projects", href: "/projects" },
-  { label: "Tasks", href: "/tasks" },
-  { label: "Team Members", href: "/users" },
-  { label: "Activities", href: "/activities" },
+  { label: "Dashboard", href: "/dashboard", roles: ["admin", "manager", "member"] },
+  { label: "Projects", href: "/projects", roles: ["admin", "manager"] },
+  { label: "Tasks", href: "/tasks", roles: ["admin", "manager"] },
+  { label: "My Tasks", href: "/tasks", roles: ["member"] },
+  { label: "Team Members", href: "/users", roles: ["admin", "manager"] },
+  { label: "Activities", href: "/activities", roles: ["admin", "manager", "member"] },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const visibleLinks = navigationLinks.filter((link) =>
+    link.roles.includes(user?.role),
+  );
 
   return (
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[270px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-5 py-6 md:block">
@@ -26,7 +32,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="space-y-2">
-        {navigationLinks.map((link) => {
+        {visibleLinks.map((link) => {
           const isActive = pathname === link.href;
 
           return (

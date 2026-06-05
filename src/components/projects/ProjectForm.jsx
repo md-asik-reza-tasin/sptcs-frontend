@@ -38,9 +38,28 @@ export default function ProjectForm({
   onSubmit,
   onCancel,
   loading = false,
+  externalErrors = {},
 }) {
   const [formData, setFormData] = useState(getInitialFormData(initialData));
-  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState("");
+  const [clearedExternalErrors, setClearedExternalErrors] = useState({});
+
+  function getFieldError(field) {
+    if (fieldErrors[field]) {
+      return fieldErrors[field];
+    }
+
+    if (clearedExternalErrors[field]) {
+      return "";
+    }
+
+    return externalErrors[field] || "";
+  }
+
+  const displayFormError = formError || (
+    clearedExternalErrors.form ? "" : externalErrors.form
+  );
 
   function handleInputChange(event) {
     const { name, value } = event.target;
@@ -49,43 +68,64 @@ export default function ProjectForm({
       ...currentData,
       [name]: value,
     }));
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: "",
+    }));
+    setClearedExternalErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: true,
+      form: true,
+    }));
+    setFormError("");
   }
 
   function validateForm() {
+    const errors = {};
+
     if (!formData.name.trim()) {
-      return "Project name is required.";
+      errors.name = "Project name is required";
     }
 
     if (!formData.description.trim()) {
-      return "Project description is required.";
+      errors.description = "Project description is required";
     }
 
     if (!formData.deadline) {
-      return "Project deadline is required.";
+      errors.deadline = "Project deadline is required";
     }
 
-    return "";
+    if (!formData.status) {
+      errors.status = "Project status is required";
+    }
+
+    return errors;
   }
 
   function handleSubmit(event) {
     event.preventDefault();
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      setClearedExternalErrors({});
+      setFormError("");
       return;
     }
 
-    setError("");
+    setFieldErrors({});
+    setClearedExternalErrors({});
+    setFormError("");
     onSubmit(formData);
   }
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      {error && <ErrorMessage message={error} />}
+      <ErrorMessage message={displayFormError} />
 
       <Input
+        error={getFieldError("name")}
         label="Project Name"
         name="name"
         onChange={handleInputChange}
@@ -95,6 +135,7 @@ export default function ProjectForm({
       />
 
       <Textarea
+        error={getFieldError("description")}
         label="Description"
         name="description"
         onChange={handleInputChange}
@@ -104,6 +145,7 @@ export default function ProjectForm({
       />
 
       <Input
+        error={getFieldError("deadline")}
         label="Deadline"
         name="deadline"
         onChange={handleInputChange}
@@ -113,6 +155,7 @@ export default function ProjectForm({
       />
 
       <Select
+        error={getFieldError("status")}
         label="Status"
         name="status"
         onChange={handleInputChange}

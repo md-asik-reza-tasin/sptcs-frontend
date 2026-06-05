@@ -11,9 +11,12 @@ import Loader from "@/components/common/Loader";
 import Modal from "@/components/common/Modal";
 import Select from "@/components/common/Select";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import RoleGuard from "@/components/layout/RoleGuard";
 import TaskComments from "@/components/tasks/TaskComments";
 import TaskForm from "@/components/tasks/TaskForm";
+import useAuth from "@/hooks/useAuth";
 import api from "@/lib/api";
+import { getErrorMessage, mapTaskErrorToField } from "@/lib/errors";
 
 const limit = 10;
 
@@ -80,11 +83,17 @@ function getMemberName(task) {
 }
 
 export default function TasksPage() {
+  const { user, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [createErrors, setCreateErrors] = useState({});
+  const [editErrors, setEditErrors] = useState({});
+  const [deleteErrors, setDeleteErrors] = useState({});
+  const [statusErrors, setStatusErrors] = useState({});
+  const [commentError, setCommentError] = useState("");
   const [search, setSearch] = useState("");
   const [project, setProject] = useState("");
   const [status, setStatus] = useState("");
@@ -114,6 +123,8 @@ export default function TasksPage() {
     deadlineStatus: "",
     sort: "latest",
   });
+  const isMember = user?.role === "member";
+  const canManageTasks = user?.role === "admin" || user?.role === "manager";
 
   const projectOptions = [
     { label: "All Projects", value: "" },
@@ -130,6 +141,8 @@ export default function TasksPage() {
 
   useEffect(() => {
     async function fetchLookups() {
+      if (authLoading || !canManageTasks) return;
+
       try {
         const [projectsResponse, usersResponse] = await Promise.all([
           api.get("/api/projects", { params: { limit: 100 } }),
@@ -139,41 +152,48 @@ export default function TasksPage() {
         setProjects(projectsResponse.data?.data || []);
         setUsers(usersResponse.data?.data || []);
       } catch (error) {
-        setError(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again.",
-        );
+        setPageError(getErrorMessage(error));
       }
     }
 
     fetchLookups();
-  }, []);
+  }, [authLoading, canManageTasks]);
 
   useEffect(() => {
     async function fetchTasks() {
+      if (authLoading || !user) return;
+
       setLoading(true);
-      setError("");
+      setPageError("");
 
       try {
+        const params = {
+          ...appliedFilters,
+          page,
+          limit,
+        };
+
+        if (isMember) {
+          delete params.assignedMember;
+          delete params.project;
+        }
+
         const response = await api.get("/api/tasks", {
-          params: { ...appliedFilters, page, limit },
+          params,
         });
 
         setTasks(response.data?.data || []);
         setTotalPages(response.data?.pages || 1);
         setTotal(response.data?.total || 0);
       } catch (error) {
-        setError(
-          error.response?.data?.message ||
-            "Something went wrong. Please try again.",
-        );
+        setPageError(getErrorMessage(error));
       } finally {
         setLoading(false);
       }
     }
 
     fetchTasks();
-  }, [appliedFilters, page, refreshKey]);
+  }, [appliedFilters, authLoading, isMember, page, refreshKey, user]);
 
   function refetchTasks() {
     setRefreshKey((currentKey) => currentKey + 1);
@@ -182,14 +202,15 @@ export default function TasksPage() {
   function handleSearch() {
     setAppliedFilters({
       search,
-      project,
+      project: isMember ? "" : project,
       status,
       priority,
-      assignedMember,
+      assignedMember: isMember ? "" : assignedMember,
       deadlineStatus,
       sort,
     });
     setPage(1);
+    setPageError("");
   }
 
   function handleReset() {
@@ -210,22 +231,55 @@ export default function TasksPage() {
       sort: "latest",
     });
     setPage(1);
+    setPageError("");
+    setCreateErrors({});
+    setEditErrors({});
+    setDeleteErrors({});
+    setStatusErrors({});
+    setCommentError("");
+  }
+
+  function openCreateModal() {
+    setCreateErrors({});
+    setPageError("");
+    setIsCreateModalOpen(true);
+  }
+
+  function closeCreateModal() {
+    setCreateErrors({});
+    setIsCreateModalOpen(false);
+  }
+
+  function openEditModal(task) {
+    setSelectedTask(task);
+    setEditErrors({});
+    setPageError("");
+    setIsEditTaskModalOpen(true);
+  }
+
+  function closeEditModal() {
+    setSelectedTask(null);
+    setEditErrors({});
+    setIsEditTaskModalOpen(false);
+  }
+
+  function closeCommentsModal() {
+    setCommentError("");
+    setSelectedTaskForComments(null);
+    setIsCommentsModalOpen(false);
   }
 
   async function handleCreateTask(formData) {
     setCreating(true);
-    setError("");
+    setCreateErrors({});
 
     try {
       await api.post("/api/tasks", formData);
-      setIsCreateModalOpen(false);
+      closeCreateModal();
       setPage(1);
       refetchTasks();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setCreateErrors(mapTaskErrorToField(getErrorMessage(error)));
     } finally {
       setCreating(false);
     }
@@ -235,18 +289,14 @@ export default function TasksPage() {
     if (!selectedTask) return;
 
     setUpdatingTask(true);
-    setError("");
+    setEditErrors({});
 
     try {
       await api.patch(`/api/tasks/${selectedTask._id}`, formData);
-      setSelectedTask(null);
-      setIsEditTaskModalOpen(false);
+      closeEditModal();
       refetchTasks();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setEditErrors(mapTaskErrorToField(getErrorMessage(error)));
     } finally {
       setUpdatingTask(false);
     }
@@ -256,16 +306,19 @@ export default function TasksPage() {
     if (!window.confirm("Are you sure you want to delete this task?")) return;
 
     setDeletingTaskId(task._id);
-    setError("");
+    setDeleteErrors((currentErrors) => ({
+      ...currentErrors,
+      [task._id]: "",
+    }));
 
     try {
       await api.delete(`/api/tasks/${task._id}`);
       refetchTasks();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setDeleteErrors((currentErrors) => ({
+        ...currentErrors,
+        [task._id]: getErrorMessage(error),
+      }));
     } finally {
       setDeletingTaskId("");
     }
@@ -273,55 +326,72 @@ export default function TasksPage() {
 
   async function handleStatusChange(task, newStatus) {
     setUpdatingStatusId(task._id);
-    setError("");
+    setStatusErrors((currentErrors) => ({
+      ...currentErrors,
+      [task._id]: "",
+    }));
 
     try {
       await api.patch(`/api/tasks/${task._id}/status`, { status: newStatus });
       refetchTasks();
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setStatusErrors((currentErrors) => ({
+        ...currentErrors,
+        [task._id]: getErrorMessage(error),
+      }));
     } finally {
       setUpdatingStatusId("");
     }
   }
 
   async function openCommentsModal(task) {
-    setError("");
+    setCommentError("");
 
     try {
       const response = await api.get(`/api/tasks/${task._id}`);
       setSelectedTaskForComments(response.data?.data || task);
       setIsCommentsModalOpen(true);
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Something went wrong. Please try again.",
-      );
+      setCommentError(getErrorMessage(error));
+      setSelectedTaskForComments(task);
+      setIsCommentsModalOpen(true);
     }
   }
 
   async function handleCommentAdded() {
     if (!selectedTaskForComments) return;
 
-    const response = await api.get(`/api/tasks/${selectedTaskForComments._id}`);
-    setSelectedTaskForComments(response.data?.data || selectedTaskForComments);
-    refetchTasks();
+    try {
+      setCommentError("");
+      const response = await api.get(`/api/tasks/${selectedTaskForComments._id}`);
+      setSelectedTaskForComments(response.data?.data || selectedTaskForComments);
+      refetchTasks();
+    } catch (error) {
+      setCommentError(getErrorMessage(error));
+    }
   }
 
   return (
-    <DashboardLayout title="Tasks" subtitle="Track and manage assigned tasks">
+    <DashboardLayout
+      title={isMember ? "My Tasks" : "Tasks"}
+      subtitle={
+        isMember
+          ? "Track and update tasks assigned to you"
+          : "Track and manage assigned tasks"
+      }
+    >
+      <RoleGuard allowedRoles={["admin", "manager", "member"]}>
       <div className="space-y-6">
-        <div className="flex justify-end">
-          <Button
-            className="w-full sm:w-auto"
-            onClick={() => setIsCreateModalOpen(true)}
-          >
-            Create Task
-          </Button>
-        </div>
+        {canManageTasks ? (
+          <div className="flex justify-end">
+            <Button
+              className="w-full sm:w-auto"
+              onClick={openCreateModal}
+            >
+              Create Task
+            </Button>
+          </div>
+        ) : null}
 
         <Card>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -332,13 +402,15 @@ export default function TasksPage() {
               placeholder="Search tasks"
               value={search}
             />
-            <Select
-              label="Project"
-              name="project"
-              onChange={(event) => setProject(event.target.value)}
-              options={projectOptions}
-              value={project}
-            />
+            {canManageTasks ? (
+              <Select
+                label="Project"
+                name="project"
+                onChange={(event) => setProject(event.target.value)}
+                options={projectOptions}
+                value={project}
+              />
+            ) : null}
             <Select
               label="Status"
               name="status"
@@ -353,13 +425,15 @@ export default function TasksPage() {
               options={priorityOptions}
               value={priority}
             />
-            <Select
-              label="Assigned Member"
-              name="assignedMember"
-              onChange={(event) => setAssignedMember(event.target.value)}
-              options={userOptions}
-              value={assignedMember}
-            />
+            {canManageTasks ? (
+              <Select
+                label="Assigned Member"
+                name="assignedMember"
+                onChange={(event) => setAssignedMember(event.target.value)}
+                options={userOptions}
+                value={assignedMember}
+              />
+            ) : null}
             <Select
               label="Deadline"
               name="deadlineStatus"
@@ -391,15 +465,19 @@ export default function TasksPage() {
         </Card>
 
         {loading && tasks.length === 0 ? <Loader text="Loading tasks..." /> : null}
-        {!loading && error ? <ErrorMessage message={error} /> : null}
-        {!loading && !error && tasks.length === 0 ? (
+        {!loading && pageError ? <ErrorMessage message={pageError} /> : null}
+        {!loading && !pageError && tasks.length === 0 ? (
           <EmptyState
-            title="No tasks found"
-            description="Create your first task or adjust your filters."
+            title={isMember ? "No assigned tasks" : "No tasks found"}
+            description={
+              isMember
+                ? "Tasks assigned to you will appear here."
+                : "Create your first task or adjust your filters."
+            }
           />
         ) : null}
 
-        {!loading && !error && tasks.length > 0 ? (
+        {!loading && !pageError && tasks.length > 0 ? (
           <>
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               {tasks.map((task) => (
@@ -424,6 +502,7 @@ export default function TasksPage() {
 
                   <Select
                     disabled={updatingStatusId === task._id}
+                    error={statusErrors[task._id]}
                     label="Update Status"
                     name={`status-${task._id}`}
                     onChange={(event) => handleStatusChange(task, event.target.value)}
@@ -432,29 +511,37 @@ export default function TasksPage() {
                   />
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Button className="w-full" onClick={() => openCommentsModal(task)} size="sm" variant="outline">Comments</Button>
-                    <Button className="w-full" onClick={() => openCommentsModal(task)} size="sm" variant="ghost">Add Comment</Button>
-                    <Button
-                      className="w-full"
-                      onClick={() => {
-                        setSelectedTask(task);
-                        setIsEditTaskModalOpen(true);
-                      }}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Edit
+                    <Button className="w-full" onClick={() => openCommentsModal(task)} size="sm" variant="outline">
+                      {isMember ? "View Comments" : "Comments"}
                     </Button>
-                    <Button
-                      className="w-full"
-                      disabled={deletingTaskId === task._id}
-                      onClick={() => handleDeleteTask(task)}
-                      size="sm"
-                      variant="danger"
-                    >
-                      {deletingTaskId === task._id ? "Deleting..." : "Delete"}
-                    </Button>
+                    {canManageTasks ? (
+                      <Button className="w-full" onClick={() => openCommentsModal(task)} size="sm" variant="ghost">Add Comment</Button>
+                    ) : null}
+                    {canManageTasks ? (
+                      <>
+                        <Button
+                          className="w-full"
+                          onClick={() => {
+                            openEditModal(task);
+                          }}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          className="w-full"
+                          disabled={deletingTaskId === task._id}
+                          onClick={() => handleDeleteTask(task)}
+                          size="sm"
+                          variant="danger"
+                        >
+                          {deletingTaskId === task._id ? "Deleting..." : "Delete"}
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
+                  <ErrorMessage message={deleteErrors[task._id]} />
                 </Card>
               ))}
             </div>
@@ -473,17 +560,19 @@ export default function TasksPage() {
         ) : null}
       </div>
 
-      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Task">
-        <TaskForm loading={creating} onCancel={() => setIsCreateModalOpen(false)} onSubmit={handleCreateTask} projects={projects} users={users} />
+      <Modal isOpen={isCreateModalOpen} onClose={closeCreateModal} title="Create New Task">
+        <TaskForm externalErrors={createErrors} loading={creating} onCancel={closeCreateModal} onSubmit={handleCreateTask} projects={projects} users={users} />
       </Modal>
 
-      <Modal isOpen={isEditTaskModalOpen} onClose={() => setIsEditTaskModalOpen(false)} title="Edit Task">
-        <TaskForm initialData={selectedTask} loading={updatingTask} onCancel={() => setIsEditTaskModalOpen(false)} onSubmit={handleUpdateTask} projects={projects} users={users} />
+      <Modal isOpen={isEditTaskModalOpen} onClose={closeEditModal} title="Edit Task">
+        <TaskForm externalErrors={editErrors} initialData={selectedTask} loading={updatingTask} onCancel={closeEditModal} onSubmit={handleUpdateTask} projects={projects} users={users} />
       </Modal>
 
-      <Modal isOpen={isCommentsModalOpen} onClose={() => setIsCommentsModalOpen(false)} title={`Comments - ${selectedTaskForComments?.title || ""}`}>
+      <Modal isOpen={isCommentsModalOpen} onClose={closeCommentsModal} title={`Comments - ${selectedTaskForComments?.title || ""}`}>
+        <ErrorMessage message={commentError} />
         <TaskComments task={selectedTaskForComments} onCommentAdded={handleCommentAdded} />
       </Modal>
+      </RoleGuard>
     </DashboardLayout>
   );
 }
